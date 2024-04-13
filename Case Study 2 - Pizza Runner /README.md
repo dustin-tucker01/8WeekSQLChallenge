@@ -2,10 +2,10 @@
 # Table of contents 
 * [Data Cleaning](#Data-Cleaning) 
 * [Questions](#Questions)
-  * A. [Pizza Metrics](#A.-Pizza-Metrics)
-  * B. [Runner and Customer Experience](#B.-Runner-and-Customer-Experience) 
-  * C. [Ingredient Optimization](#C.-Ingredient-Optimization) (the most challenging)
-  * D. [Pricing and Ratings](#D.-Pricing-and-Ratings)
+  * A. [Pizza Metrics](#Pizza-Metrics)
+  * B. [Runner and Customer Experience](#Runner-and-Customer-Experience) 
+  * C. [Ingredient Optimization](#Ingredient-Optimization) (the most challenging)
+  * D. [Pricing and Ratings](#Pricing-and-Ratings)
 
 ## Problem Statement
 Danny, inspired by the global love for pizza and a vision of combining 80s Retro Styling with Pizza, launched Pizza Runner. 
@@ -82,7 +82,7 @@ RENAME COLUMN duration TO duration_min;
 ```
 
 # Questions
-## A. Pizza Metrics
+## Pizza Metrics
 
 ### How many pizzas were ordered?
 
@@ -308,7 +308,7 @@ ON dd.d = oo.dow;
 |  Sunday     |    0   |
 
 
-## B. Runner and Customer Experience
+## Runner and Customer Experience
 
 ### How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
 
@@ -525,7 +525,7 @@ ON c.runner_id = r.runner_id;
 |     4     |        null         |
 
 
-## C. Ingredient Optimization 
+## Ingredient Optimization 
 
 ### What are the standard ingredients for each pizza?
 
@@ -759,7 +759,7 @@ ORDER BY times_used DESC;
 | Tomato Sauce |     3      |
 
 
-## D. Pricing and Ratings
+## Pricing and Ratings
 
 ### If a Meat Lovers pizza costs $12 and Vegetarian costs $10 and there were no charges for changes 
 * how much money has Pizza Runner made so far if there are no delivery fees?

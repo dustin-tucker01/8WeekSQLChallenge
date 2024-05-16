@@ -325,16 +325,47 @@ ORDER BY
 
 
 ### How many customers have upgraded to an annual plan in 2020?
-
 ```sql
+SELECT 
+    COUNT(*) AS total_annual
+FROM 
+    subscriptions
+WHERE 
+    plan_id = 3 
+    AND EXTRACT(YEAR FROM start_date) = 2020;
 ```
 *output*
+
+| total_annual |
+|--------------|
+| 195          |
+
 
 ### How many days on average does it take for a customer to buy an annual plan from the day they join Foodie-Fi?
 
 ```sql
+WITH cte AS (
+    SELECT *
+    FROM subscriptions
+    WHERE plan_id = 0
+),
+cte2 AS (
+    SELECT *
+    FROM subscriptions 
+    WHERE plan_id = 3
+)
+SELECT 
+    CEIL(AVG(cc.start_date - c.start_date)) AS avg_days
+FROM 
+    cte c
+JOIN 
+    cte2 cc ON c.customer_id = cc.customer_id;
 ```
 *output*
+
+| avg_days |
+|----------|
+| 105      |
 
 ### Can you further breakdown this average value into 30 day periods? (i.e. 0-30 days, 31-60 days etc)
 

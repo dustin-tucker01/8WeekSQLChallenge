@@ -24,52 +24,305 @@ Within the foodie_fi database schema, Danny has provided the following tables fo
 ### Based off the 8 sample customers provided in the sample from the subscriptions table, write a brief description about each customer’s onboarding journey.
 * Try to keep it as short as possible - you may also want to run some sort of join to make your explanations a bit easier!
 ```sql
+WITH cte AS
+(SELECT 
+	customer_id, 
+	plan_name
+FROM 
+	sample_subscriptions s
+JOIN 
+	plans p ON s.plan_id = p.plan_id
+ORDER BY 
+	customer_id, 
+	s.start_date)
+SELECT 
+	customer_id, 
+	ARRAY_TO_STRING(ARRAY_AGG(plan_name),', ') AS customer_journey
+FROM 
+	cte
+GROUP BY 
+	customer_id;
+-- Each customer's journey can be seen in this result table, with all customers starting with a trial 
+-- and then each customer deciding to upgrade their subscription or churn
 ```
 *output*
+
+| customer_id | customer_journey                 |
+|-------------|----------------------------------|
+| 1           | trial, basic monthly             |
+| 2           | trial, pro annual                |
+| 11          | trial, churn                     |
+| 13          | trial, basic monthly, pro monthly|
+| 15          | trial, pro monthly, churn        |
+| 16          | trial, basic monthly, pro annual |
+| 18          | trial, pro monthly               |
+| 19          | trial, pro monthly, pro annual   |
+
 ## Data Analysis Questions
 ### How many customers has Foodie-Fi ever had?
-
 ```sql
+SELECT 
+	COUNT(DISTINCT customer_id) AS total_customers
+FROM 
+	subscriptions;
 ```
 *output*
+
+| total_customers |
+|-----------------|
+| 1000            |
+
 ### What is the monthly distribution of trial plan start_date values for our dataset? 
-* Use the start of the month as the group by value.
-
+* This query effectively includes the year, month, and the number of trial plan start dates within that month and year
+* I did this query in this manner to allow for the use of this same query as the business gains trial plans into 2021. 
 ```sql
+WITH months_years AS ( -- creating the base table for all 12 months for the years that are present in the dataset
+    SELECT 
+        y.year AS year, 
+        TO_CHAR(x, 'Month') AS month 
+    FROM 
+        generate_series('2024-01-01'::DATE, '2024-12-01'::DATE, '1 Month') x
+    CROSS JOIN 
+        (SELECT DISTINCT EXTRACT(YEAR FROM start_date) AS year FROM subscriptions) y
+    ORDER BY 
+        y.year, x
+), 
+monthly_distributions AS ( -- getting the number of trial plan start dates grouped by year and month
+    SELECT 
+        EXTRACT(YEAR FROM start_date) AS year, 
+        TO_CHAR(start_date, 'Month') AS month, 
+        COUNT(start_date) AS trials
+    FROM 
+        subscriptions
+    WHERE 
+        plan_id = 0
+    GROUP BY 
+        year, 
+        TO_CHAR(start_date, 'Month')
+)
+SELECT -- final table 
+    o.year, 
+    o.month, 
+    m.trials
+FROM 
+    monthly_distributions m
+RIGHT JOIN 
+    months_years o ON m.year = o.year AND m.month = o.month;
+-- joining the base table to the distributions present in the dataset to include months with no trial plan start dates
+
 ```
 *output*
+| year | month      | trials |
+|------|------------|--------|
+| 2020 | January    | 88     |
+| 2020 | February   | 68     |
+| 2020 | March      | 94     |
+| 2020 | April      | 81     |
+| 2020 | May        | 88     |
+| 2020 | June       | 79     |
+| 2020 | July       | 89     |
+| 2020 | August     | 88     |
+| 2020 | September  | 87     |
+| 2020 | October    | 79     |
+| 2020 | November   | 75     |
+| 2020 | December   | 84     |
+| 2021 | January    | null   |
+| 2021 | February   | null   |
+| 2021 | March      | null   |
+| 2021 | April      | null   |
+| 2021 | May        | null   |
+| 2021 | June       | null   |
+| 2021 | July       | null   |
+| 2021 | August     | null   |
+| 2021 | September  | null   |
+| 2021 | October    | null   |
+| 2021 | November   | null   |
+| 2021 | December   | null   |
 
 ### What plan start_date values occur after the year 2020 for our dataset? 
 * Show the breakdown by count of events for each plan_name.
-
 ```sql
+WITH cte AS ( -- plan names and total subscriptions after 2020 
+    SELECT 
+        p.plan_name, 
+        COUNT(*) AS total_subscriptions
+    FROM 
+        subscriptions s
+    RIGHT JOIN 
+        plans p ON p.plan_id = s.plan_id
+    WHERE 
+        EXTRACT(YEAR FROM s.start_date) > 2020 OR s.start_date IS NULL
+    GROUP BY 
+        p.plan_name
+),
+cte2 AS ( -- getting plans with no subscriptions 
+    SELECT 
+        plan_name, 
+        0 AS total_subscriptions
+    FROM 
+        plans 
+    WHERE 
+        NOT EXISTS (SELECT 1 FROM cte WHERE cte.plan_name = plans.plan_name)
+)
+SELECT 
+    * 
+FROM 
+    cte 
+UNION 
+SELECT 
+    * 
+FROM 
+    cte2
+ORDER BY 
+    total_subscriptions DESC; 
 ```
 *output*
+| plan_name      | total_subscriptions |
+|----------------|---------------------|
+| churn          | 71                  |
+| pro annual     | 63                  |
+| pro monthly    | 60                  |
+| basic monthly  | 8                   |
+| trial          | 0                   |
 
 ### What is the customer count and percentage of customers who have churned rounded to 1 decimal place?
 
 ```sql
+SELECT 
+	COUNT(DISTINCT(customer_id)) AS total_customers,
+	ROUND((SUM(CASE WHEN plan_id = 4 THEN 1 ELSE 0 END)::DECIMAL/COUNT(DISTINCT customer_id))*100,1) AS churn_rate
+FROM 
+	subscriptions;
 ```
 *output*
+
+| total_customers | churn_rate |
+|-----------------|------------|
+| 1000            | 30.7       |
 
 ### How many customers have churned straight after their initial free trial?  
 * What percentage is this rounded to the nearest whole number?
-
 ```sql
+WITH cte AS (
+    -- Numbering the journey per customer
+    SELECT 
+        *, 
+        ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY start_date) trial_num
+    FROM 
+        subscriptions
+),
+cte2 AS ( -- getting total number of customers 
+    SELECT 
+        COUNT(DISTINCT customer_id) AS t
+    FROM 
+        subscriptions
+)
+SELECT 
+    COUNT(*) AS churn_count, -- customers who churned after trial 
+    ROUND((COUNT(*) / MAX(cte2.t)::numeric) * 100) AS churn_rate -- (churn rate after trial) 
+FROM 
+    cte 
+CROSS JOIN 
+    cte2
+WHERE 
+    trial_num = 2 
+    AND plan_id = 4;
 ```
 *output*
+
+| churn_count | churn_rate |
+|-------------|------------|
+| 92          | 9          |
 
 ### What is the number and percentage of customer plans after their initial free trial?
-
 ```sql
+
+WITH cte AS (
+    -- Numbering the journey per customer
+    SELECT 
+        *, 
+        ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY start_date) trial_num
+    FROM 
+        subscriptions
+),
+cte2 AS ( -- number of plans after trial 
+SELECT 
+	COUNT(*) AS t
+FROM 
+	cte
+WHERE 
+	trial_num = 2
+)
+SELECT 
+	p.plan_name, 
+	COUNT(*), 
+	ROUND(((COUNT(*)/MAX(cte2.t)::numeric)*100),2) AS plan_percentage
+FROM 
+	cte c
+JOIN 
+	plans p ON c.plan_id = p.plan_id
+CROSS JOIN 
+	cte2
+WHERE 
+	trial_num = 2
+GROUP BY
+	p.plan_name;
 ```
 *output*
+
+| plan_name      | count | plan_percentage |
+|----------------|-------|-----------------|
+| pro annual     | 37    | 3.70            |
+| pro monthly    | 325   | 32.50           |
+| churn          | 92    | 9.20            |
+| basic monthly  | 546   | 54.60           |
+
 
 ### What is the customer count and percentage breakdown of all 5 plan_name values at 2020-12-31?
 
 ```sql
+WITH cte AS (
+    SELECT 
+        *, 
+        ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY start_date DESC) trial_num
+    FROM 
+        subscriptions
+    WHERE 
+        start_date <= '2020-12-31'
+),
+cte2 AS (
+    SELECT 
+        *, 
+        COUNT(*) OVER() AS total_customers
+    FROM 
+        cte
+    WHERE 
+        trial_num = 1
+)
+SELECT 
+    p.plan_name, 
+    COUNT(*) AS active_plans, 
+    ROUND(100 * (COUNT(*) / MAX(c.total_customers)::numeric), 2) AS plan_percentage
+FROM 
+    cte2 c
+JOIN 
+    plans p ON c.plan_id = p.plan_id
+GROUP BY 
+    p.plan_name
+ORDER BY 
+    active_plans DESC;
 ```
 *output*
+
+| plan_name      | active_plans | percentage |
+|----------------|--------------|------------|
+| pro monthly    | 326          | 32.60      |
+| churn          | 236          | 23.60      |
+| basic monthly  | 224          | 22.40      |
+| pro annual     | 195          | 19.50      |
+| trial          | 19           | 1.90       |
+
+
 
 ### How many customers have upgraded to an annual plan in 2020?
 

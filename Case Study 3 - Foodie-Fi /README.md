@@ -370,14 +370,68 @@ JOIN
 ### Can you further breakdown this average value into 30 day periods? (i.e. 0-30 days, 31-60 days etc)
 
 ```sql
+WITH cte AS (
+    SELECT *
+    FROM subscriptions
+    WHERE plan_id = 0 OR plan_id = 3
+),
+cte2 AS (
+    SELECT 
+        cc.start_date - c.start_date AS days_between_purchases
+    FROM 
+        cte c
+    JOIN 
+        cte cc 
+        ON c.customer_id = cc.customer_id 
+        AND c.plan_id < cc.plan_id
+)
+SELECT 
+    CASE 
+        WHEN days_between_purchases <= 30 THEN '0-30 Days'  -- case statement is executed sequentially
+        WHEN days_between_purchases <= 60 THEN '31-60 Days' -- once a condition evaluates to true
+        WHEN days_between_purchases <= 90 THEN '61-90 Days' 
+        WHEN days_between_purchases <= 120 THEN '91-120 Days'
+        WHEN days_between_purchases <= 150 THEN '121-150 Days'
+        ELSE 'Over 150 Days' 
+    END AS bin, 
+    COUNT(*) AS count
+FROM 
+    cte2
+GROUP BY
+    1;
+-- case statement is executed sequentially
+-- once a condition evaluates to true the subsequent conditions are not evaluated
 ```
 *output*
+
+| Bin           | Count |
+|---------------|-------|
+| 121-150 Days  | 42    |
+| 31-60 Days    | 24    |
+| 0-30 Days     | 49    |
+| Over 150 Days | 74    |
+| 91-120 Days   | 35    |
+| 61-90 Days    | 34    |
 
 ### How many customers downgraded from a pro monthly to a basic monthly plan in 2020?
 
 ```sql
+WITH cte AS (
+    SELECT 
+        plan_id, -- the current plan must be 2
+        LEAD(plan_id) OVER (PARTITION BY customer_id ORDER BY start_date) AS next_plan, -- the next plan must be 1
+        LEAD(start_date) OVER (PARTITION BY customer_id ORDER BY start_date) AS next_start -- the downgrade needs to be in 2020
+    FROM 
+        subscriptions
+)
+SELECT *
+FROM cte
+WHERE 
+    plan_id = 2 
+    AND next_plan = 1 
+    AND EXTRACT(YEAR FROM next_start) = 2020;
 ```
-*output*
+````results in no customers going from pro monthly to basic monthly in 2020.````
 
 ## Challenge Payment Questions
 ### The Foodie-Fi team wants you to create a new payments table for the year 2020 that includes amounts paid by each customer in the subscriptions table with the following requirements:
